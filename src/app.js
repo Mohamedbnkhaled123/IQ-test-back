@@ -13,9 +13,21 @@ const adminRoutes = require('./routes/admin.routes');
 
 const app = express();
 const frontendDist = path.resolve(__dirname, '../../iq test front/dist/frontend/browser');
+const allowedOrigins = new Set([
+  ...String(env.corsOrigin || '').split(',').map((o) => o.trim()).filter(Boolean),
+  'https://iq-test-online.vercel.app',
+  'http://localhost:4200',
+  'http://localhost:8000'
+]);
 
 app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(cors({ origin: env.corsOrigin, credentials: true }));
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+    return callback(null, false);
+  },
+  credentials: true
+}));
 app.use(express.json({ limit: '2mb' }));
 app.use('/exam-images', express.static(path.resolve(__dirname, '../public/exam-images')));
 
@@ -39,6 +51,9 @@ if (fs.existsSync(frontendDist)) {
     res.sendFile(path.join(frontendDist, 'index.html'));
   });
 } else {
+  app.get('/', (_req, res) => {
+    res.json({ success: true, data: { service: 'IQ & Personality API', status: 'ok' } });
+  });
   app.use((_req, res) => {
     res.status(404).json({ success: false, message: 'المسار المطلوب غير موجود', code: 'NOT_FOUND' });
   });

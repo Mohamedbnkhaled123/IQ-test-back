@@ -9,7 +9,10 @@ async function connectDB() {
   }
   if (!cachedPromise) {
     mongoose.set('strictQuery', true);
-    cachedPromise = mongoose.connect(env.mongodbUri).catch((err) => {
+    cachedPromise = mongoose.connect(env.mongodbUri, {
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 5000
+    }).catch((err) => {
       cachedPromise = null;
       throw err;
     });

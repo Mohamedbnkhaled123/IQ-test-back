@@ -32,7 +32,15 @@ app.use(express.json({ limit: '2mb' }));
 app.use('/exam-images', express.static(path.resolve(__dirname, '../public/exam-images')));
 
 app.get('/api/health', (_req, res) => {
-  res.json({ success: true, data: { status: 'ok' } });
+  res.json({
+    success: true,
+    data: {
+      status: 'ok',
+      hasMongoEnv: Boolean(process.env.MONGODB_URI),
+      freePreviewMode: env.freePreviewMode,
+      adminNoPasswordMode: env.adminNoPasswordMode
+    }
+  });
 });
 
 app.use('/api/auth', authRoutes);

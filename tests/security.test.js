@@ -1,3 +1,4 @@
+process.env.NODE_ENV = 'test';
 process.env.EXAM_FREE_PREVIEW_MODE = 'false';
 process.env.ADMIN_NO_PASSWORD_MODE = 'false';
 

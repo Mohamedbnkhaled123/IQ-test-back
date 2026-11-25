@@ -7,6 +7,40 @@ const { AppError } = require('../utils/app-error');
 const { toStudentQuestionDTO, toFinalResultDTO } = require('../utils/sanitizer.util');
 const { getOrCreateSettings, reserveAvailableGrant, consumeGrant, createGrant } = require('./grant.service');
 const { scoreExam } = require('./scoring/scoring.engine');
+const { store, encodeDemoResultId, decodeDemoResultId } = require('./demo-store.service');
+
+function startDemoExam(user) {
+  const activeQuestions = store.questions.filter((q) => q.isActive !== false);
+  return {
+    attemptId: `demo_pending_${Date.now()}`,
+    grantId: 'demo_grant',
+    startedAt: new Date(),
+    examTitle: store.settings.examTitle,
+    questions: activeQuestions.map(toStudentQuestionDTO)
+  };
+}
+
+function submitDemoExam(user, answers) {
+  const activeQuestions = store.questions.filter((q) => q.isActive !== false);
+  const scored = scoreExam({ questions: activeQuestions, answers, settings: store.settings });
+  user.completedAttemptsCount = (user.completedAttemptsCount || 0) + 1;
+  const resultDto = {
+    attemptId: '',
+    examineeName: user.name,
+    attemptNumber: user.completedAttemptsCount,
+    submittedAt: new Date(),
+    sectionScores: scored.sectionScores,
+    rawScore: scored.rawScore,
+    maxScore: scored.maxScore,
+    iqScore: scored.iqScore,
+    iqClassification: scored.iqClassification,
+    personalityProfile: scored.personalityProfile
+  };
+  const attemptId = encodeDemoResultId(resultDto);
+  resultDto.attemptId = attemptId;
+  store.attempts.set(attemptId, resultDto);
+  return { attemptId };
+}
 
 async function reserveOrCreatePreviewGrant(user, GrantModel, deps) {
   let grant = await reserveAvailableGrant(user.normalizedName, user.normalizedPhone, GrantModel);
@@ -27,6 +61,9 @@ async function reserveOrCreatePreviewGrant(user, GrantModel, deps) {
 }
 
 async function startExam(user, deps = {}) {
+  if (env.demoNoDbMode && !deps.ExamGrant) {
+    return startDemoExam(user);
+  }
   const GrantModel = deps.ExamGrant || ExamGrant;
   const QuestionModel = deps.Question || Question;
   const AttemptModel = deps.Attempt || Attempt;
@@ -61,6 +98,9 @@ async function startExam(user, deps = {}) {
 }
 
 async function submitExam(user, attemptId, answers, deps = {}) {
+  if (env.demoNoDbMode && !deps.Attempt && String(attemptId).startsWith('demo_')) {
+    return submitDemoExam(user, answers);
+  }
   const AttemptModel = deps.Attempt || Attempt;
   const QuestionModel = deps.Question || Question;
   const UserModel = deps.User || User;
@@ -99,6 +139,11 @@ async function submitExam(user, attemptId, answers, deps = {}) {
 }
 
 async function getAttemptResult(user, attemptId) {
+  if (env.demoNoDbMode) {
+    const cached = store.attempts.get(attemptId) || decodeDemoResultId(attemptId);
+    if (!cached) throw new AppError('النتيجة غير موجودة', 404, 'NOT_FOUND');
+    return { ...cached, attemptId };
+  }
   const attempt = await Attempt.findById(attemptId).populate('userId', 'name');
   if (!attempt) throw new AppError('النتيجة غير موجودة', 404, 'NOT_FOUND');
   const ownerId = attempt.userId?._id?.toString() || attempt.userId?.toString();

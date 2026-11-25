@@ -1,3 +1,4 @@
+const { env } = require('../src/config/env');
 const { connectDB } = require('../src/config/db');
 const app = require('../src/app');
 
@@ -5,7 +6,7 @@ const PUBLIC_NO_DB_PATHS = ['/', '/api/health', '/api/auth/config'];
 
 module.exports = async (req, res) => {
   const pathOnly = (req.url || '/').split('?')[0];
-  if (!PUBLIC_NO_DB_PATHS.includes(pathOnly) && !pathOnly.startsWith('/exam-images/')) {
+  if (env.hasMongoUri && !PUBLIC_NO_DB_PATHS.includes(pathOnly) && !pathOnly.startsWith('/exam-images/')) {
     try {
       await connectDB();
     } catch (err) {

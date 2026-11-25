@@ -3,11 +3,14 @@ const Question = require('../models/question.model');
 const ExamGrant = require('../models/exam-grant.model');
 const Attempt = require('../models/attempt.model');
 const Payment = require('../models/payment.model');
+const { env } = require('../config/env');
 const { AppError } = require('../utils/app-error');
 const { toUserDTO, toFinalResultDTO } = require('../utils/sanitizer.util');
 const { getOrCreateSettings, createGrant } = require('./grant.service');
+const { store, getDemoAdminOverview } = require('./demo-store.service');
 
 async function getAdminOverview() {
+  if (env.demoNoDbMode) return getDemoAdminOverview();
   const [users, attempts, grants, payments, settings] = await Promise.all([
     User.find().sort({ createdAt: -1 }),
     Attempt.find({ status: 'submitted' }).populate('userId', 'name phone').sort({ submittedAt: -1 }),
@@ -35,20 +38,38 @@ async function getAdminOverview() {
 }
 
 async function listQuestions() {
+  if (env.demoNoDbMode) return store.questions;
   return Question.find().sort({ section: 1, order: 1 });
 }
 
 async function createQuestion(payload) {
+  if (env.demoNoDbMode) {
+    const item = { ...payload, _id: `demo_q_${Date.now()}` };
+    store.questions.push(item);
+    return item;
+  }
   return Question.create(payload);
 }
 
 async function updateQuestion(questionId, payload) {
+  if (env.demoNoDbMode) {
+    const idx = store.questions.findIndex((q) => q._id === questionId);
+    if (idx === -1) throw new AppError('السؤال غير موجود', 404, 'NOT_FOUND');
+    store.questions[idx] = { ...store.questions[idx], ...payload };
+    return store.questions[idx];
+  }
   const updated = await Question.findByIdAndUpdate(questionId, payload, { new: true, runValidators: true });
   if (!updated) throw new AppError('السؤال غير موجود', 404, 'NOT_FOUND');
   return updated;
 }
 
 async function deleteQuestion(questionId) {
+  if (env.demoNoDbMode) {
+    const idx = store.questions.findIndex((q) => q._id === questionId);
+    if (idx === -1) throw new AppError('السؤال غير موجود', 404, 'NOT_FOUND');
+    store.questions.splice(idx, 1);
+    return { deletedId: questionId };
+  }
   const deleted = await Question.findByIdAndDelete(questionId);
   if (!deleted) throw new AppError('السؤال غير موجود', 404, 'NOT_FOUND');
   return { deletedId: deleted._id };
@@ -59,6 +80,10 @@ async function getSettings() {
 }
 
 async function updateSettings(payload) {
+  if (env.demoNoDbMode) {
+    Object.assign(store.settings, payload);
+    return store.settings;
+  }
   const settings = await getOrCreateSettings();
   Object.assign(settings, payload);
   await settings.save();

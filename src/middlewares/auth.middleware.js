@@ -3,6 +3,7 @@ const User = require('../models/user.model');
 const { env } = require('../config/env');
 const { AppError } = require('../utils/app-error');
 const { asyncHandler } = require('../utils/async-handler');
+const { resolveUserFromTokenPayload } = require('../services/demo-store.service');
 
 function extractBearerToken(req) {
   const header = req.headers.authorization || '';
@@ -26,7 +27,9 @@ const requireUser = asyncHandler(async (req, _res, next) => {
   if (payload.role !== 'user' || !payload.userId) {
     throw new AppError('صلاحية غير كافية', 403, 'FORBIDDEN');
   }
-  const user = await User.findById(payload.userId);
+  const user = env.demoNoDbMode
+    ? resolveUserFromTokenPayload(payload)
+    : await User.findById(payload.userId);
   if (!user) {
     throw new AppError('المستخدم غير موجود', 401, 'UNAUTHORIZED');
   }

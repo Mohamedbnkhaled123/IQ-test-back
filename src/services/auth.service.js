@@ -4,13 +4,12 @@ const { env } = require('../config/env');
 const { AppError } = require('../utils/app-error');
 const { normalizeArabicText, normalizePhone, calculateAge } = require('../utils/normalize.util');
 const { toUserDTO } = require('../utils/sanitizer.util');
+const { findOrCreateDemoUser, findDemoUser } = require('./demo-store.service');
 
 function signUserToken(user) {
-  return jwt.sign(
-    { role: 'user', userId: user._id.toString() },
-    env.jwtSecret,
-    { expiresIn: '7d' }
-  );
+  const payload = { role: 'user', userId: user._id.toString() };
+  if (env.demoNoDbMode) payload.userProfile = toUserDTO(user);
+  return jwt.sign(payload, env.jwtSecret, { expiresIn: '7d' });
 }
 
 async function registerUser(payload) {
@@ -18,6 +17,10 @@ async function registerUser(payload) {
   const normalizedPhone = normalizePhone(payload.phone);
   if (!normalizedName || normalizedPhone.length < 8) {
     throw new AppError('يرجى إدخال اسم ورقم تليفون صحيحين', 400, 'INVALID_IDENTITY');
+  }
+  if (env.demoNoDbMode) {
+    const demoUser = findOrCreateDemoUser(payload);
+    return { token: signUserToken(demoUser), user: toUserDTO(demoUser) };
   }
   let user = await User.findOne({ normalizedName, normalizedPhone });
   if (!user) {
@@ -39,7 +42,9 @@ async function registerUser(payload) {
 async function loginUser({ name, phone }) {
   const normalizedName = normalizeArabicText(name);
   const normalizedPhone = normalizePhone(phone);
-  const user = await User.findOne({ normalizedName, normalizedPhone });
+  const user = env.demoNoDbMode
+    ? findDemoUser(name, phone)
+    : await User.findOne({ normalizedName, normalizedPhone });
   if (!user) {
     throw new AppError('لم يتم العثور على حساب مطابق، يرجى التسجيل أولاً', 404, 'USER_NOT_FOUND');
   }

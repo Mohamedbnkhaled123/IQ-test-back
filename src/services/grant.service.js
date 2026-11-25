@@ -4,8 +4,10 @@ const Attempt = require('../models/attempt.model');
 const { env } = require('../config/env');
 const { normalizeArabicText, normalizePhone, calculateNextAttemptPrice } = require('../utils/normalize.util');
 const { toUserDTO, toFinalResultDTO } = require('../utils/sanitizer.util');
+const { store } = require('./demo-store.service');
 
 async function getOrCreateSettings() {
+  if (env.demoNoDbMode) return store.settings;
   let settings = await Settings.findOne({ singletonKey: 'GLOBAL_SETTINGS' });
   if (!settings) {
     settings = await Settings.create({ singletonKey: 'GLOBAL_SETTINGS' });
@@ -70,6 +72,21 @@ function formatPurchasedGrant(grant) {
 
 async function getDashboardData(user) {
   const settings = await getOrCreateSettings();
+  if (env.demoNoDbMode) {
+    const baseExamPrice = settings.baseExamPrice;
+    const retakePrice = baseExamPrice * settings.retakeMultiplier;
+    const myAttempts = Array.from(store.attempts.values()).filter((a) => a.examineeName === user.name);
+    return {
+      user: toUserDTO(user),
+      hasAvailableGrant: true,
+      availableGrant: { _id: 'demo_grant', status: 'available', source: 'admin_complimentary', amountPaid: 0 },
+      nextAttemptPrice: calculateNextAttemptPrice(user.completedAttemptsCount || 0, baseExamPrice, settings.retakeMultiplier),
+      baseExamPrice,
+      retakePrice,
+      myAttempts,
+      purchasedGrants: []
+    };
+  }
   const [availableGrant, attempts, purchased] = await Promise.all([
     findAvailableGrant(user.normalizedName, user.normalizedPhone),
     Attempt.find({ userId: user._id, status: 'submitted' }).sort({ submittedAt: -1 }),
